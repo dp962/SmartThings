@@ -215,7 +215,7 @@
   const R1 = 86, R2 = 68;
   const C1 = 2 * Math.PI * R1, C2 = 2 * Math.PI * R2;
 
-  let count = 0, running = false, win = null, timer = null;
+  let count = 0, running = false, win = null, timer = null, ipLoaded = false;
 
   const $ = (id) => document.getElementById(id);
   const ipEl = $("ip"), numEl = $("num"), pctEl = $("pct");
@@ -243,9 +243,43 @@
   const nowMs = () => Date.now() + offset;
   let lastSlot = Math.floor(nowMs() / SLOT);
 
-  // Published pages cannot call other sites, so the time server is unavailable: device clock is used.
+  // fetch with timeout
+  async function getJSON(u, ms = 6000) {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), ms);
+    try {
+      const r = await fetch(u, { cache: "no-store", signal: ctl.signal });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return await r.json();
+    } finally { clearTimeout(t); }
+  }
+
+  // Public time: synced from a time server (round-trip corrected), falls back to device clock
   async function syncTime() {
-    synced = false;
+    // 1) worldtimeapi (also gives timezone + client IP)
+    try {
+      const t0 = Date.now();
+      const j = await getJSON("https://worldtimeapi.org/api/ip");
+      const t1 = Date.now();
+      const server = j.unixtime * 1000 + 500;           // unixtime has 1s resolution
+      offset = server - (t0 + t1) / 2;
+      if (j.timezone) tz = j.timezone;
+      if (j.client_ip && !ipLoaded) { ipEl.textContent = j.client_ip; ipLoaded = true; }
+      synced = true;
+    } catch (e1) {
+      // 2) timeapi.io (UTC)
+      try {
+        const t0 = Date.now();
+        const j = await getJSON("https://timeapi.io/api/Time/current/zone?timeZone=UTC");
+        const t1 = Date.now();
+        const server = Date.parse(j.dateTime + "Z");
+        offset = server - (t0 + t1) / 2;
+        synced = true;
+      } catch (e2) {
+        synced = false;   // keep device clock
+      }
+    }
+    lastSlot = Math.floor(nowMs() / SLOT);  // avoid a false reset caused by the clock correction
     tickClock();
   }
 
@@ -274,6 +308,7 @@
     stop();
     count = 0;
     render("idle");
+    showIP();
     if (resume) start();
     say("Count reset at " + fmt(t, { hour: "2-digit", minute: "2-digit", hour12: false }) + ".");
   }
@@ -282,6 +317,7 @@
   setInterval(tickClock, 1000);
   syncTime();
   setInterval(syncTime, 10 * 60 * 1000);
+  setInterval(showIP, 10 * 60 * 1000);
 
   function render(state) {
     const left = maxCount - count;
@@ -322,8 +358,18 @@
   const buzz = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} };
 
   async function showIP() {
-    // Outside requests are blocked on published pages, so the IP lookup is not available.
-    ipEl.textContent = "Unavailable here";
+    const sources = [
+      async () => (await getJSON("https://api.ipify.org?format=json")).ip,
+      async () => (await getJSON("https://api64.ipify.org?format=json")).ip,
+      async () => (await getJSON("https://ipapi.co/json/")).ip,
+    ];
+    for (const get of sources) {
+      try {
+        const ip = await get();
+        if (ip) { ipEl.textContent = ip; ipLoaded = true; return; }
+      } catch (e) { /* try next */ }
+    }
+    if (!ipLoaded) ipEl.textContent = "Unavailable";
   }
 
   function finish() {
@@ -338,7 +384,6 @@
     if (!running) return;
     if (count >= maxCount) return finish();
 
-    showIP();
     win = window.open(url, "_blank", "width=800,height=600");
     if (!win) {
       running = false;
