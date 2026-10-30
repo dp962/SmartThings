@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a1120">
+<title>Auto Opener</title>
+<style>
+  :root {
+    --bg: #eef1f7;
+    --bg-glow: rgba(59, 130, 246, .14);
+    --surface: #ffffff;
+    --surface-2: #f4f6fb;
+    --line: #e1e6f0;
+    --text: #0f1a2b;
+    --muted: #66758c;
+    --track: #e3e8f2;
+    --a1: #14b8a6;
+    --a2: #3b82f6;
+    --danger: #e5483d;
+    --ok: #12a05c;
+    --shadow: 0 10px 40px rgba(15, 26, 43, .08);
+    --r-lg: 28px;
+    --r-md: 18px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0a1120;
+      --bg-glow: rgba(59, 130, 246, .22);
+      --surface: #121b2e;
+      --surface-2: #17223a;
+      --line: #213050;
+      --text: #eef3fb;
+      --muted: #8d9db6;
+      --track: #1f2d4a;
+      --a1: #2dd4bf;
+      --a2: #60a5fa;
+      --danger: #f2655b;
+      --ok: #3ddc8a;
+      --shadow: 0 10px 40px rgba(0, 0, 0, .4);
+    }
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background:
+      radial-gradient(120% 60% at 50% -10%, var(--bg-glow), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-family: ui-rounded, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    display: flex; flex-direction: column; gap: 14px;
+    max-width: 520px; margin: 0 auto;
+    padding: calc(env(safe-area-inset-top, 0px) + 16px) 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
+  }
+
+  /* ---------- Top bar ---------- */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .title { font-size: 22px; font-weight: 750; letter-spacing: -.02em; margin: 0; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--line);
+    font-size: 14px; font-weight: 650; color: var(--muted);
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .badge.running { color: var(--ok); }
+  .badge.running .dot { background: var(--ok); box-shadow: 0 0 0 0 var(--ok); animation: ping 1.4s ease-out infinite; }
+  .badge.done { color: var(--a2); }
+  .badge.done .dot { background: var(--a2); }
+  @keyframes ping { 70% { box-shadow: 0 0 0 8px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+
+  /* ---------- IP chip ---------- */
+  .ip {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--r-md); padding: 12px 16px;
+  }
+  .ip svg { flex: none; width: 22px; height: 22px; color: var(--a2); }
+  .ip span { color: var(--muted); font-size: 13px; display: block; }
+  .ip b { font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; word-break: break-all; }
+
+  /* ---------- Hero ring ---------- */
+  .stage {
+    flex: 1; min-height: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--r-lg); box-shadow: var(--shadow);
+    padding: 20px;
+  }
+  .ring { position: relative; width: min(100%, 320px); aspect-ratio: 1; }
+  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+  .ring circle { fill: none; stroke-linecap: round; }
+  .t1 { stroke: var(--track); stroke-width: 12; }
+  .b1 { stroke: url(#grad); stroke-width: 12; transition: stroke-dashoffset .45s cubic-bezier(.3, .7, .2, 1); }
+  .t2 { stroke: var(--track); stroke-width: 4; opacity: .7; }
+  .b2 { stroke: var(--a1); stroke-width: 4; }
+  .ticks { stroke: var(--line); stroke-width: 1.5; stroke-linecap: butt; }
+
+  .center {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+  }
+  .num {
+    font-size: clamp(54px, 20vw, 84px); font-weight: 800; letter-spacing: -.04em;
+    line-height: 1; font-variant-numeric: tabular-nums;
+  }
+  .pct { margin-top: 10px; font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .pct b { color: var(--text); font-weight: 700; }
+
+  /* ---------- Stats ---------- */
+  .stats { display: grid; grid-template-columns: 1fr 1.5fr 1fr; gap: 10px; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--r-md); padding: 12px 12px 13px; text-align: center;
+  }
+  .stat span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  .stat b { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  /* ---------- Controls ---------- */
+  .note { margin: 0; text-align: center; font-size: 13px; line-height: 1.45; color: var(--muted); min-height: 1.45em; }
+  .note.warn { color: var(--danger); }
+  .actions { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  .actions.two { grid-template-columns: 1.6fr 1fr; }
+  button {
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    font: inherit; font-size: 19px; font-weight: 700; color: #fff;
+    border: 0; border-radius: 20px; min-height: 66px; cursor: pointer;
+    transition: transform .1s ease, filter .2s ease;
+  }
+  button svg { width: 22px; height: 22px; }
+  button:active { transform: scale(.97); }
+  button:focus-visible { outline: 3px solid var(--a2); outline-offset: 3px; }
+  #start { background: linear-gradient(135deg, var(--a1), var(--a2)); color: #04121f; }
+  #stop { background: var(--danger); }
+  #reset { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); }
+  [hidden] { display: none !important; }
+
+  @media (max-height: 680px) {
+    .stage { padding: 10px; }
+    .ring { width: min(100%, 210px); }
+    .stat { padding: 8px; }
+    button { min-height: 54px; font-size: 17px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .badge.running .dot { animation: none; }
+    .b1, button { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1 class="title">Auto Opener</h1>
+  <div class="badge" id="badge"><span class="dot"></span><span id="badgeText">Ready</span></div>
+</header>
+
+<section class="ip" aria-live="polite">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"></path>
+  </svg>
+  <div><span>Your IP address</span><b id="ip">Loading…</b></div>
+</section>
+
+<main class="stage">
+  <div class="ring" id="ringA11y" role="progressbar" aria-valuemin="0" aria-valuemax="30" aria-valuenow="0" aria-label="Opens completed">
+    <svg viewBox="0 0 200 200" aria-hidden="true">
+      <defs>
+        <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#14b8a6"></stop>
+          <stop offset="1" stop-color="#3b82f6"></stop>
+        </linearGradient>
+      </defs>
+      <g class="ticks" id="ticks"></g>
+      <circle class="t1" cx="100" cy="100" r="86"></circle>
+      <circle class="b1" id="bar" cx="100" cy="100" r="86"></circle>
+      <circle class="t2" cx="100" cy="100" r="68"></circle>
+      <circle class="b2" id="win" cx="100" cy="100" r="68"></circle>
+    </svg>
+    <div class="center">
+      <div class="num" id="num">0</div>
+      <div class="pct" id="pct">of 30 opens</div>
+    </div>
+  </div>
+</main>
+
+<section class="stats" aria-label="Details">
+  <div class="stat"><span>Remaining</span><b id="remain">30</b></div>
+  <div class="stat clock"><span id="dtDate">Public time</span><b id="dtTime">--:--:--</b></div>
+  <div class="stat"><span>Per open</span><b id="per">3.5s</b></div>
+</section>
+
+<p class="note" id="next"></p>
+<p class="note" id="note"></p>
+
+<div class="actions" id="actions">
+  <button id="start">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z"/></svg>
+    <span id="startText">Start</span>
+  </button>
+  <button id="stop" hidden>
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>
+    Stop
+  </button>
+  <button id="reset" hidden>Reset</button>
+</div>
+
+<script>
+  const url = "https://virtual.smartthings.com/?id=1003143";
+  const openTime = 3000; // keep each window open for 3 seconds
+  const waitTime = 500;  // short pause before reopening
+  const maxCount = 30;   // stop after this many opens
+
+  const R1 = 86, R2 = 68;
+  const C1 = 2 * Math.PI * R1, C2 = 2 * Math.PI * R2;
+
+  let count = 0, running = false, win = null, timer = null;
+
+  const $ = (id) => document.getElementById(id);
+  const ipEl = $("ip"), numEl = $("num"), pctEl = $("pct");
+  const bar = $("bar"), winBar = $("win"), ring = $("ringA11y");
+  const badge = $("badge"), badgeText = $("badgeText"), noteEl = $("note");
+  const startBtn = $("start"), stopBtn = $("stop"), resetBtn = $("reset"), startText = $("startText");
+  const actions = $("actions");
+
+  // Setup rings + tick marks
+  bar.style.strokeDasharray = C1;  bar.style.strokeDashoffset = C1;
+  winBar.style.strokeDasharray = C2; winBar.style.strokeDashoffset = C2;
+  (function drawTicks() {
+    let s = "";
+    for (let i = 0; i < 60; i++) {
+      const a = (i / 60) * Math.PI * 2, r1 = 96, r2 = i % 5 === 0 ? 92 : 94;
+      s += `<line x1="${100 + r1 * Math.cos(a)}" y1="${100 + r1 * Math.sin(a)}" x2="${100 + r2 * Math.cos(a)}" y2="${100 + r2 * Math.sin(a)}"/>`;
+    }
+    $("ticks").innerHTML = s;
+  })();
+  $("per").textContent = ((openTime + waitTime) / 1000).toFixed(1) + "s";
+
+  // Public (internet) time: synced from a time server, falls back to device clock
+  const SLOT = 30 * 60 * 1000; // reset every 30 minutes
+  let offset = 0, tz = undefined, synced = false, userStopped = false;
+  const nowMs = () => Date.now() + offset;
+  let lastSlot = Math.floor(nowMs() / SLOT);
+
+  // Published pages cannot call other sites, so the time server is unavailable: device clock is used.
+  async function syncTime() {
+    synced = false;
+    tickClock();
+  }
+
+  function fmt(ms, opts) {
+    try { return new Date(ms).toLocaleString("en-GB", { ...opts, timeZone: tz }); }
+    catch (e) { return new Date(ms).toLocaleString("en-GB", opts); }
+  }
+
+  function tickClock() {
+    const t = nowMs();
+    $("dtDate").textContent = (synced ? "Public time · " : "Device time · ") +
+      fmt(t, { day: "numeric", month: "short" });
+    $("dtTime").textContent = fmt(t, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+
+    const nextAt = (Math.floor(t / SLOT) + 1) * SLOT;
+    const left = Math.max(0, Math.ceil((nextAt - t) / 1000));
+    const mm = String(Math.floor(left / 60)).padStart(2, "0"), ss = String(left % 60).padStart(2, "0");
+    $("next").textContent = `Count resets at ${fmt(nextAt, { hour: "2-digit", minute: "2-digit", hour12: false })} (in ${mm}:${ss})`;
+
+    const slot = Math.floor(t / SLOT);
+    if (slot !== lastSlot) { lastSlot = slot; halfHourReset(t); }
+  }
+
+  function halfHourReset(t) {
+    const resume = !userStopped;
+    stop();
+    count = 0;
+    render("idle");
+    if (resume) start();
+    say("Count reset at " + fmt(t, { hour: "2-digit", minute: "2-digit", hour12: false }) + ".");
+  }
+
+  tickClock();
+  setInterval(tickClock, 1000);
+  syncTime();
+  setInterval(syncTime, 10 * 60 * 1000);
+
+  function render(state) {
+    const left = maxCount - count;
+    numEl.textContent = count;
+    pctEl.innerHTML = count ? `<b>${Math.round((count / maxCount) * 100)}%</b> of ${maxCount} opens` : `of ${maxCount} opens`;
+    bar.style.strokeDashoffset = C1 * (1 - count / maxCount);
+    ring.setAttribute("aria-valuenow", count);
+    $("remain").textContent = left;
+
+    badge.className = "badge " + (state === "running" ? "running" : state === "done" ? "done" : "");
+    badgeText.textContent = state === "running" ? "Running" : state === "done" ? "Finished" : count ? "Stopped" : "Ready";
+
+    startBtn.hidden = state === "running" || state === "done";
+    startText.textContent = count ? "Resume" : "Start";
+    stopBtn.hidden = state !== "running";
+    resetBtn.hidden = state === "running" || count === 0;
+    actions.classList.toggle("two", !startBtn.hidden && !resetBtn.hidden);
+  }
+
+  function say(msg, warn) {
+    noteEl.textContent = msg || "";
+    noteEl.classList.toggle("warn", !!warn);
+  }
+
+  // Inner ring shows how long the current window stays open
+  function runWindowTimer() {
+    winBar.style.transition = "none";
+    winBar.style.strokeDashoffset = C2;
+    void winBar.getBoundingClientRect();
+    winBar.style.transition = `stroke-dashoffset ${openTime}ms linear`;
+    winBar.style.strokeDashoffset = 0;
+  }
+  function resetWindowTimer() {
+    winBar.style.transition = "none";
+    winBar.style.strokeDashoffset = C2;
+  }
+
+  const buzz = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} };
+
+  async function showIP() {
+    // Outside requests are blocked on published pages, so the IP lookup is not available.
+    ipEl.textContent = "Unavailable here";
+  }
+
+  function finish() {
+    running = false;
+    resetWindowTimer();
+    render("done");
+    say("All " + maxCount + " opens completed.");
+    buzz([80, 60, 80]);
+  }
+
+  function cycle() {
+    if (!running) return;
+    if (count >= maxCount) return finish();
+
+    showIP();
+    win = window.open(url, "_blank", "width=800,height=600");
+    if (!win) {
+      running = false;
+      resetWindowTimer();
+      render("idle");
+      say("Pop-up blocked. Allow pop-ups for this page, then tap Resume.", true);
+      return;
+    }
+    count++;
+    render("running");
+    runWindowTimer();
+
+    timer = setTimeout(() => {
+      if (win && !win.closed) win.close();
+      resetWindowTimer();
+      timer = setTimeout(cycle, waitTime);
+    }, openTime);
+  }
+
+  function start() {
+    userStopped = false;
+    if (running) return;
+    running = true;
+    say("");
+    buzz(30);
+    render("running");
+    cycle();
+  }
+
+  function stop() {
+    running = false;
+    clearTimeout(timer);
+    if (win && !win.closed) win.close();
+    resetWindowTimer();
+    render("idle");
+    say("Stopped. Tap Resume to continue.");
+  }
+
+  function reset() {
+    stop();
+    count = 0;
+    say("");
+    render("idle");
+  }
+
+  startBtn.addEventListener("click", start);
+  stopBtn.addEventListener("click", () => { userStopped = true; stop(); });
+  resetBtn.addEventListener("click", () => { userStopped = true; reset(); });
+
+  showIP();
+  render("idle");
+  start(); // autorun on load, as in the original
+</script>
+</body>
+</html>
